@@ -1,4 +1,3 @@
-import asyncio
 import collections
 import distutils.version
 import json
@@ -13,30 +12,38 @@ import zipfile
 from pathlib import Path
 from typing import Dict, List, Any
 
-from joplin_api import JoplinApi
+from joplin_api import JoplinApiSync
 
+
+# step 1: extract notes from synology note station
+NSX_FILE = "notestation-test-books.nsx"
+# step 2: write notes to Joplin notes app
+JOPLIN_TOKEN = ""
+
+# step 3: optionally set these (defaults are fine)
+ALLOW_HTML_IN_MD = True
 
 class nsx2joplin:
-    """nsx2joplin extracts notes from Synlogy Note Station and saves
-    them to the Joplinnote app.
+    """nsx2joplin extracts notes from synlogy note station and saves
+    them to the joplinnote app.
 
-    Returns
+    returns
     -------
     None
     """
 
     def __init__(self) -> None:
-        """Instantiate the nsx2joplin object.
+        """instantiate the nsx2joplin object.
 
-        It will be checked if pandoc is correctly installed.
+        it will be checked if pandoc is correctly installed.
 
-        Parameters
+        parameters
         ----------
-        None
+        none
 
-        Returns
+        returns
         -------
-        None
+        none
         """
 
         def check_pandoc():
@@ -45,7 +52,7 @@ class nsx2joplin:
 
             if not shutil.which("pandoc") and not os.path.isfile("pandoc"):
                 print(
-                    "Can't find pandoc. Please install pandoc or place it to the "
+                    "can't find pandoc. please install pandoc or place it to the "
                     "directory, where the script is."
                 )
                 exit(1)
@@ -57,31 +64,36 @@ class nsx2joplin:
                     .split("\n", 1)[0]
                     .strip()
                 )
-                print("Found pandoc " + pandoc_ver)
+                print("found pandoc " + pandoc_ver)
 
-                if distutils.version.LooseVersion(
+                if ALLOW_HTML_IN_MD:
+                    TO_FORMAT = "markdown_strict+pipe_tables"
+                else:
+                    TO_FORMAT = "markdown_strict+pipe_tables-raw_html"
+
+                if distutils.version.looseversion(
                     pandoc_ver
-                ) < distutils.version.LooseVersion("1.16"):
+                ) < distutils.version.looseversion("1.16"):
                     pandoc_args = [
                         "pandoc",
                         "-f",
                         "html",
                         "-t",
-                        "markdown_strict+pipe_tables-raw_html",
+                        TO_FORMAT,
                         "--no-wrap",
                         "-o",
                         pandoc_output_file.name,
                         pandoc_input_file.name,
                     ]
-                elif distutils.version.LooseVersion(
+                elif distutils.version.looseversion(
                     pandoc_ver
-                ) < distutils.version.LooseVersion("1.19"):
+                ) < distutils.version.looseversion("1.19"):
                     pandoc_args = [
                         "pandoc",
                         "-f",
                         "html",
                         "-t",
-                        "markdown_strict+pipe_tables-raw_html",
+                        TO_FORMAT,
                         "--wrap=none",
                         "-o",
                         pandoc_output_file.name,
@@ -93,9 +105,9 @@ class nsx2joplin:
                         "-f",
                         "html",
                         "-t",
-                        "markdown_strict+pipe_tables-raw_html",
+                        TO_FORMAT,
                         "--wrap=none",
-                        "--atx-headers",
+                        "--markdown-headings=atx",
                         "-o",
                         pandoc_output_file.name,
                         pandoc_input_file.name,
@@ -106,9 +118,9 @@ class nsx2joplin:
                     "-f",
                     "html",
                     "-t",
-                    "markdown_strict+pipe_tables-raw_html",
+                    TO_FORMAT,
                     "--wrap=none",
-                    "--atx-headers",
+                    "--markdown-headings=atx",
                     "-o",
                     pandoc_output_file.name,
                     pandoc_input_file.name,
@@ -124,31 +136,31 @@ class nsx2joplin:
 
     def extract_data_from_nsx(
         self,
-        nsx_file: str,
+        nsx_file: Path,
         media_folder: str = "attachments",
         save_pickle: bool = False,
-    ) -> Dict[str, List[Dict[str, Any]]]:
-        """Reads a Synology Note Station .nsx file and extracts its
-        content. It will be saved in a dict comprising notebooks and
+    ) -> dict[str, list[dict[str, Any]]]:
+        """reads a synology note station .nsx file and extracts its
+        content. it will be saved in a dict comprising notebooks and
         notes information.
 
-        Parameters
+        parameters
         ----------
         nsx_file : str
-            File name (including path) of the Synology Note Station
+            file name (including path) of the synology note station
             .nsx file
         media_folder : str, optional (default: 'attachments')
-            Folder name where all extracted attachments will be saved.
+            folder name where all extracted attachments will be saved.
         save_pickle : bool, optional (default: False)
-            If True, the extracted data will be saved in a
-            nsx_content.pickle file. This might be useful if you want
+            if true, the extracted data will be saved in a
+            nsx_content.pickle file. this might be useful if you want
             to further process the extracted data.
 
-        Returns
+        returns
         -------
-        Dict[str, List[Dict[str, Any]]]
-            Python dictionary with keys 'notebooks' and 'notes'.
-            It will contain all relevant extracted information
+        dict[str, list[dict[str, Any]]]
+            python dictionary with keys 'notebooks' and 'notes'.
+            it will contain all relevant extracted information
             that will be necessary to use for an import into
             another note taking app.
         """
@@ -167,27 +179,27 @@ class nsx2joplin:
         work_path = Path.cwd()
         media_folder = sanitise_path_string(media_folder)
 
-        Notebook = collections.namedtuple("Notebook", ["path", "media_path"])
+        notebook = collections.namedtuple("notebook", ["path", "media_path"])
 
         files_to_convert = Path(work_path).glob("*.nsx")
 
         if not files_to_convert:
-            print("No .nsx files found")
+            print("no .nsx files found")
             exit(1)
 
         nsx_zip = zipfile.ZipFile(nsx_file)
         config_data = json.loads(nsx_zip.read("config.json").decode("utf-8"))
         notebook_id_to_path_index = dict()
 
-        print(f"Extracting notes from {nsx_zip.filename}")
+        print(f"extracting notes from {nsx_zip.filename}")
 
         notebooks = list()
         for notebook_id in config_data["notebook"]:
             notebook_data = json.loads(nsx_zip.read(notebook_id).decode("utf-8"))
-            notebook_title = notebook_data["title"] or "Untitled"
+            notebook_title = notebook_data["title"] or "untitled"
             notebook_path = work_path.joinpath(sanitise_path_string(notebook_title))
 
-            print(f"Reading notebook {notebook_title}")
+            print(f"reading notebook {notebook_title}")
 
             n = 1
             while notebook_path.is_dir():
@@ -199,27 +211,27 @@ class nsx2joplin:
             notebook_media_path = Path(notebook_path / media_folder)
             notebook_media_path.mkdir(parents=True)
 
-            notebook_id_to_path_index[notebook_id] = Notebook(
+            notebook_id_to_path_index[notebook_id] = notebook(
                 notebook_path, notebook_media_path
             )
 
             notebooks.append(
                 {
                     "id": notebook_id,
-                    "title": notebook_data["title"] or "Untitled",
+                    "title": notebook_data["title"] or "untitled",
                     "ctime": notebook_data["ctime"],
                     "mtime": notebook_data["ctime"],
                     "path": notebook_path,
                     "media_path": notebook_media_path,
                 }
-            )
+           )
 
         note_id_to_title_index = {}
 
         notes = list()
         for idx, note_id in enumerate(config_data["note"], start=1):
             note_data = json.loads(nsx_zip.read(note_id).decode("utf-8"))
-            note_title = note_data.get("title", "Untitled")
+            note_title = note_data.get("title", "untitled")
             note_id_to_title_index[note_id] = note_title
             num_notes = len(config_data["note"])
 
@@ -229,7 +241,7 @@ class nsx2joplin:
             except KeyError:
                 continue
 
-            print(f"Reading note {idx}/{num_notes}: {note_title}")
+            print(f"reading note {idx}/{num_notes}: {note_title}")
 
             content = re.sub(
                 "< img class=[ ^ >]*syno-notestation-image-object[^>]*"
@@ -286,7 +298,7 @@ class nsx2joplin:
                 {
                     "id": note_id,
                     "parent_nb_id": note_data["parent_id"],
-                    "title": note_data.get("title", "Untitled"),
+                    "title": note_data.get("title", "untitled"),
                     "content": content,
                     "attachment": attachments,
                     "tag": tag,
@@ -304,45 +316,45 @@ class nsx2joplin:
         if save_pickle:
             with open("nsx_content.pickle", "wb") as output_file:
                 pickle.dump(nsx_content, output_file)
-            print("Saved nsx_content to nsx_content.pickle")
+            print("saved nsx_content to nsx_content.pickle")
 
         return nsx_content
 
-    def export_to_joplin(self, token: str, nsx_content: Dict) -> None:
-        """Exports notes to Joplin
+    def export_to_joplin(self, token: str, nsx_content: dict) -> None:
+        """exports notes to joplin
 
-        Parameters
+        parameters
         ----------
         token : str
-            Authorization token. Within the Joplin app, go to
-            Tools/Options/Web Clipper to find token.
-        nsx_content : Dict
-            Python dictionary with keys 'notebooks' and 'notes'.
-            It will contain all relevant extracted information
+            authorization token. within the joplin app, go to
+            tools/options/web clipper to find token.
+        nsx_content : dict
+            python dictionary with keys 'notebooks' and 'notes'.
+            it will contain all relevant extracted information
             that will be necessary to use for an import into
             another note taking app.
 
-        Returns
+        returns
         -------
-        None
+        none
         """
-        joplin = JoplinApi(token=token)
+        joplin = JoplinApiSync(token=token)
 
-        async def create_folder(notebook_title):
-            res = await joplin.create_folder(folder=notebook_title)
+        def create_folder(notebook_title):
+            res = joplin.create_folder(folder=notebook_title)
             data = res.json()
             parent_id = data["id"]
             assert type(parent_id) is str
 
             return parent_id
 
-        async def create_resource(attachments, content, attachment_path):
+        def create_resource(attachments, content, attachment_path):
             for index, attachment in enumerate(attachments, start=0):
 
                 attachment_type = attachment["type"]
                 name = attachment["name"]
 
-                res = await joplin.create_resource(
+                res = joplin.create_resource(
                     attachment_path.joinpath(name), **{"title": name}
                 )
                 resource_id = res.json()["id"]
@@ -358,7 +370,7 @@ class nsx2joplin:
 
             return content
 
-        async def create_note(
+        def create_note(
             joplin_id,
             note_title,
             note_content,
@@ -373,13 +385,13 @@ class nsx2joplin:
                 "user_created_time": user_created_time,
                 "user_updated_time": user_updated_time,
             }
-            res = await joplin.create_note(
+            res = joplin.create_note(
                 title=note_title, body=body, parent_id=joplin_id, **kwargs
             )
             assert res.status_code == 200
 
         for notebook in nsx_content["notebooks"]:
-            joplin_id = asyncio.run(create_folder(notebook["title"]))
+            joplin_id = create_folder(notebook["title"])
 
             # filter notes that belong to current notebook
             filtered_notes = [
@@ -392,7 +404,7 @@ class nsx2joplin:
             for idx, note in enumerate(filtered_notes, start=1):
 
                 print(
-                    f"Writing note {idx}/{num_filtered_notes} in {notebook['title']}: "
+                    f"writing note {idx}/{num_filtered_notes} in {notebook['title']}: "
                     f"{note['title']}"
                 )
 
@@ -401,38 +413,33 @@ class nsx2joplin:
                 if note["tag"]:
                     tag = ",".join(note["tag"])
 
-                # Create resource, if necessary
+                # create resource, if necessary
                 if note["attachment"]:
-                    note["content"] = asyncio.run(
-                        create_resource(
+                    note["content"] = create_resource(
                             attachments=note["attachment"],
                             content=note["content"],
                             attachment_path=notebook["media_path"],
                         )
-                    )
-
-                asyncio.run(
-                    create_note(
-                        joplin_id=joplin_id,
-                        note_title=note["title"],
-                        note_content=note["content"],
-                        note_tags=tag,
-                        user_created_time=note["ctime"] * 1000,
-                        user_updated_time=note["mtime"] * 1000,
-                    )
+                create_note(
+                    joplin_id=joplin_id,
+                    note_title=note["title"],
+                    note_content=note["content"],
+                    note_tags=tag,
+                    user_created_time=note["ctime"] * 1000,
+                    user_updated_time=note["mtime"] * 1000,
                 )
 
                 if idx % 1000 == 0:
                     seconds = 300
                     print(
-                        f"Sleep for {seconds} seconds in order to not crash Joplin web "
+                        f"sleep for {seconds} seconds in order to not crash joplin web "
                         "clipper"
                     )
                     time.sleep(seconds)
                 elif idx % 500 == 0:
                     seconds = 120
                     print(
-                        f"Sleep for {seconds} seconds in order to not crash Joplin web "
+                        f"sleep for {seconds} seconds in order to not crash joplin web "
                         "clipper"
                     )
                     time.sleep(seconds)
@@ -442,10 +449,9 @@ if __name__ == "__main__":
     # intantiate nsx2joplin object
     nsx = nsx2joplin()
 
-    # step 1: extract notes from Synology Note Station
-    # Put your .nsx file here
+    # put your .nsx file here
     p = Path(__file__).resolve().parent
-    nsx_file = p.joinpath("notestation-test-books.nsx")
+    nsx_file = p.joinpath(NSX_FILE)
 
     # possibility to load a previously saved .pickle file
     load_nsx_content = False
@@ -454,10 +460,8 @@ if __name__ == "__main__":
         pickle_file = "nsx_content.pickle"
         with open(pickle_file, "rb") as input_file:
             nsx_content = pickle.load(input_file)
-        print("Loaded nsx_content from nsx_content.pickle")
+        print("loaded nsx_content from nsx_content.pickle")
     else:
         nsx_content = nsx.extract_data_from_nsx(nsx_file=nsx_file, save_pickle=False)
 
-    # step 2: write notes to Joplin notes app
-    joplin_token = ""  # noqa
-    nsx.export_to_joplin(token=joplin_token, nsx_content=nsx_content)
+    nsx.export_to_joplin(token=JOPLIN_TOKEN, nsx_content=nsx_content)

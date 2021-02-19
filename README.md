@@ -26,10 +26,10 @@ Imports a Synology Note Station .nsx file into Joplin notes app
 
 #### Step 3:
 - Open /src/nsx2joplin.py within your project folder.
-- Replace `nsx_file = p.joinpath("notestation-test-books.nsx")` with your .nsx file  
-`nsx_file = p.joinpath("YOUR_NSX_FILE")`
-- At the end of the script, replace the line `joplin_token = ""` with your token:  
-`joplin_token = "PASTE_YOUR_TOKEN_HERE"`
+- Replace `NSX_FILE = "notestation-test-books.nsx"` with your .nsx file
+`NSX_FILE = "YOUR_NSX_FILE"`
+- Insert your token on the line below:
+`JOPLIN_TOKEN = ""`
 
 #### Step 4:
 - Run the script (your Joplin app needs to be open).
